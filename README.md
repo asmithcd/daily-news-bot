@@ -28,7 +28,7 @@ sequenceDiagram
 - Fetches the **top 5 trending tech news articles** daily from **[NewsAPI.org](https://newsapi.org/)**.
 - Can be modified to fetch **different news categories**.
 - Sends you a daily **email** with article summaries and links.
-- Runs **daily at 08:00 UTC** via **GitHub Actions**.
+- Runs **daily at 18:00 UTC** via **GitHub Actions**.
   
 ### 🔐 Secure Email Handling
 - Uses **SMTP authentication** to send emails securely.
