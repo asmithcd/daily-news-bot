@@ -1,6 +1,6 @@
 # 📰 Daily News Email Bot
 
-[![GitHub Actions](https://img.shields.io/github/actions/workflow/status/arassp/daily-news-bot/schedule.yml?label=Status)](https://github.com/arassp/daily-news-bot/actions)
+![License](https://img.shields.io/github/license/arassp/daily-news-bot)
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue) 
 ![Powered by NewsAPI](https://img.shields.io/badge/powered%20by-NewsAPI-orange)
 
