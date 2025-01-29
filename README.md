@@ -59,7 +59,7 @@ Go to **Settings > Secrets and variables > Actions** and add:
 | `SMTP_PASSWORD` | Your email password or app password. |
 ---
 ### **2️⃣ Modify GitHub Actions Workflow (`.github/workflows/schedule.yml`)**
-- Update the **schedule.yml** if needed (default is **08:00 UTC daily**).
+- Update the **schedule.yml** if needed (default is **18:00 UTC daily**).
 - Modify environment variables if using a different/custom SMTP provider.
 ---
 ### **3️⃣ Test the Workflow**
