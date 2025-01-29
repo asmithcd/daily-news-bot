@@ -63,7 +63,7 @@ Go to **Settings > Secrets and variables > Actions** and add:
 - Modify environment variables if using a different/custom SMTP provider.
 ---
 ### **3️⃣ Test the Workflow**
-- The workflow runs automatically at **08:00 UTC**.
+- The workflow runs automatically at **18:00 UTC**.
 - But you can also **manually trigger** it under **GitHub Actions > Run Workflow**.
 ---
 ## 📰 How to Change The News Category 
