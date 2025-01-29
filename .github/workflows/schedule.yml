@@ -2,7 +2,7 @@ name: Daily Tech News Email
 
 on:
   schedule:
-    - cron: '0 8 * * *'  # Runs at 08:00 UTC every day
+    - cron: '0 18 * * *'  # Runs at 10:00 AM PST (18:00 UTC)
   workflow_dispatch:  # Allows manual runs
 
 jobs:
