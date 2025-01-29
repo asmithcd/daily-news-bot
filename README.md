@@ -20,7 +20,7 @@ sequenceDiagram
     NewsAPI-->>GitHub Actions: 2. Return news data
     GitHub Actions->>SMTP Server: 3. Send formatted email
     SMTP Server->>Your Inbox: 4. Deliver email
-    Note right of GitHub Actions: Runs daily at 08:00 UTC
+    Note right of GitHub Actions: Runs daily at 18:00 UTC
 ```
 
 ## ✨ Features
