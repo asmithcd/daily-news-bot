@@ -8,12 +8,6 @@ from datetime import datetime, timezone, timedelta
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-DOMAINS = (
-    "reuters.com,wsj.com,bloomberg.com,marketwatch.com,ft.com,cnbc.com,forbes.com,"
-    "finance.yahoo.com,nytimes.com,bizjournals.com,autonews.com,greentechmedia.com,"
-    "pv-magazine.com,rvbusiness.com,cycleworld.com,motorcycle.com,appliancebusiness.com"
-)
-
 DISPLAY_NAMES = {
     "appliances": "Appliances",
     "auto dealers": "Auto Dealers",
@@ -86,20 +80,21 @@ def is_fresh(article, hours=36):
 def is_sector_related(article, sector_terms):
     title = (article.get('title') or "").lower()
     desc = (article.get('description') or "").lower()
-    return any(term in title or term in desc for term in sector_terms)
+    combined = f"{title} {desc}"
+    return any(term in combined for term in sector_terms)
 
 def get_news(api_key):
     try:
         sector_results = {}
         for cat in categories:
+            query = cat.split()[0] if cat != "auto manufacturers" else "automaker"  # e.g., "solar" or "mattress"
             resp = requests.get(
                 "https://newsapi.org/v2/everything",
                 params={
-                    "q": cat,
+                    "q": query,
                     "apiKey": api_key,
                     "sortBy": "publishedAt",
-                    "pageSize": 50,
-                    "domains": DOMAINS
+                    "pageSize": 50
                 },
                 timeout=10
             )
