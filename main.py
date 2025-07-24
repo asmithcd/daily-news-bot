@@ -14,6 +14,9 @@ DOMAINS = (
     "pv-magazine.com,rvbusiness.com,cycleworld.com,motorcycle.com,appliancebusiness.com"
 )
 
+# For these sectors, require headline match to prevent pop culture/lifestyle noise
+TIGHT_HEADLINE_ONLY = {"pool industry", "mattress", "appliances", "rv"}
+
 SECTOR_TERMS = {
     "auto dealers": [
         "auto dealer", "dealership", "car dealership", "car sales", "autonation", "group 1 automotive", "lad", "pag", "an", "cargurus", "carmax", "autotrader"
@@ -28,13 +31,13 @@ SECTOR_TERMS = {
         "solar", "pv", "photovoltaic", "first solar", "enphase", "solar edge", "maxeon", "sunpower"
     ],
     "pool industry": [
-        "pool supply", "poolcorp", "swimming pool", "pool equipment", "hayward"
+        "poolcorp", "poolcorp inc", "pool supply", "commercial pool", "swimming pool equipment", "hayward", "pool product", "pool manufacturer"
     ],
     "mattress": [
-        "mattress", "sleep number", "tempur", "sealy", "casper", "simmons"
+        "mattress company", "mattress firm", "mattress manufacturer", "sleep number", "tempur", "sealy", "casper", "simmons"
     ],
     "appliances": [
-        "appliance", "whirlpool", "electrolux", "frigidaire", "maytag", "lg electronics", "haier", "samsung appliances", "bosch appliances"
+        "appliance manufacturer", "appliance company", "whirlpool", "electrolux", "frigidaire", "maytag", "lg electronics", "haier", "samsung appliances", "bosch appliances"
     ],
     "powersports": [
         "powersport", "atv", "utv", "polaris", "brp", "yamaha", "can-am", "arctic cat"
@@ -43,7 +46,7 @@ SECTOR_TERMS = {
         "motorcycle", "harley-davidson", "ducati", "yamaha", "honda", "ktm", "indian motorcycle"
     ],
     "rv": [
-        "rv", "recreational vehicle", "winnebago", "thor", "forest river", "jayco", "motorhome", "travel trailer"
+        "rv manufacturer", "rv company", "winnebago", "thor", "forest river", "jayco", "motorhome manufacturer", "travel trailer manufacturer"
     ]
 }
 
@@ -59,12 +62,16 @@ def is_fresh(article, hours=36):
         return False
     return (datetime.now(timezone.utc) - published_dt) <= timedelta(hours=hours)
 
-def is_sector_related(article, sector_terms):
+def is_sector_related(article, sector_terms, sector, tight_headline_only=TIGHT_HEADLINE_ONLY):
     title = (article.get('title') or "").lower()
     desc = (article.get('description') or "").lower()
-    return any(term in title or term in desc for term in sector_terms)
+    # For noisy sectors, require sector term in headline only
+    if sector in tight_headline_only:
+        return any(term in title for term in sector_terms)
+    else:
+        return any(term in title or term in desc for term in sector_terms)
 
-def get_news(api_key, per_sector=8, fallback_min=4):
+def get_news(api_key, per_sector=8, fallback_min=3):
     try:
         sector_results = {}
         for cat in categories:
@@ -85,20 +92,20 @@ def get_news(api_key, per_sector=8, fallback_min=4):
                 art for art in resp.json().get("articles", [])
                 if is_fresh(art)
             ]
-            related = [
+            relevant = [
                 (art["title"], art["publishedAt"], art["url"])
-                for art in fresh_articles if is_sector_related(art, sector_terms)
+                for art in fresh_articles if is_sector_related(art, sector_terms, cat)
             ]
-            # If not enough, just add more fresh articles (for context, not perfect)
-            if len(related) < fallback_min:
+            if len(relevant) < fallback_min:
+                # Backfill with just-fresh (if necessary) but ONLY if nothing sector relevant found
                 for art in fresh_articles:
                     tup = (art["title"], art["publishedAt"], art["url"])
-                    if tup not in related:
-                        related.append(tup)
-                    if len(related) >= fallback_min:
+                    if tup not in relevant:
+                        relevant.append(tup)
+                    if len(relevant) >= fallback_min:
                         break
-            if related:
-                sector_results[cat] = related[:per_sector]
+            if relevant:
+                sector_results[cat] = relevant[:per_sector]
         return sector_results
     except Exception as e:
         logging.error(f"News API request failed: {str(e)}")
