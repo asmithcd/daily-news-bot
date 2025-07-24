@@ -31,37 +31,27 @@ def get_news(api_key):
         response = requests.get(url, timeout=10)
         response.raise_for_status()  # Raise exception for 4xx/5xx errors (HTTP errors)
       
-      all_articles = []
-for cat in categories:
-    resp = requests.get(
-        "https://newsapi.org/v2/everything",
-        params={
-            "q": cat,
-            "apiKey": os.getenv("NEWSAPI_KEY"),
-            "sortBy": "publishedAt",
-            "pageSize": 3
-        },
-        timeout=10
-    )
-    resp.raise_for_status()
-    for art in resp.json().get("articles", []):
-        all_articles.append((cat, art["title"], art["publishedAt"], art["url"]))
-
-            title = article.get('title', 'No title available').strip() # Get news title or fallback to default
-            description = article.get('description', '').strip() # Get news description
-            url = article.get('url', '#').strip() # And the article URL
-          
-            # Create a simple snippet/template for each news snippet
-            snippet = (
-                f"🔥 {idx}. {title}\n"
-                f"{description[:200]}{'...' if len(description) > 200 else ''}\n" # Reduce description if >200 chars
-                f"📖 Read more: {url}\n"
-                "\n----------------------------------------\n"
+       all_articles = []
+        for cat in categories:
+            resp = requests.get(
+                "https://newsapi.org/v2/everything",
+                params={
+                    "q": cat,
+                    "apiKey": api_key,
+                    "sortBy": "publishedAt",
+                    "pageSize": 3
+                },
+                timeout=10
             )
-            news_snippets.append(snippet) # Append formatted snippet to the list
-         
-        return "\n".join(news_snippets) # Return all formatted news snippets as a string
-    # Handling API request errors
+            resp.raise_for_status()
+            for art in resp.json().get("articles", []):
+                all_articles.append((cat, art["title"], art["publishedAt"], art["url"]))
+
+        if not all_articles:
+            logging.warning("No articles found across all categories")
+
+        return all_articles
+
     except requests.exceptions.RequestException as e: 
         logging.error(f"News API request failed: {str(e)}")
         return None # Return None in case of an error
