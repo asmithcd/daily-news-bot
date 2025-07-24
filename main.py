@@ -8,15 +8,6 @@ from datetime import datetime, timezone, timedelta
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-RELEVANT_KEYWORDS = [
-    "earnings", "tariff", "tariffs", "trade war", "acquisition", "merger", "guidance",
-    "forecast", "ipo", "strike", "regulation", "bill", "legislation", "lawsuit",
-    "settlement", "antitrust", "sec", "layoff", "restructuring", "chapter 11",
-    "guidelines", "inflation", "deflation", "revenue", "profit", "quarter", "sales",
-    "recall", "investigation", "class action", "price increase", "price hike", "costs",
-    "supply chain", "union", "agreement", "deal", "fine", "settlement"
-]
-
 DOMAINS = (
     "reuters.com,wsj.com,bloomberg.com,marketwatch.com,ft.com,cnbc.com,forbes.com,"
     "finance.yahoo.com,nytimes.com,bizjournals.com,autonews.com,greentechmedia.com,"
@@ -68,20 +59,12 @@ def is_fresh(article, hours=36):
         return False
     return (datetime.now(timezone.utc) - published_dt) <= timedelta(hours=hours)
 
-def is_market_moving(article, sector_terms):
-    title = (article.get('title') or "").lower()
-    desc = (article.get('description') or "").lower()
-    return (
-        any(word in title or word in desc for word in RELEVANT_KEYWORDS) and
-        any(term in title or term in desc for term in sector_terms)
-    )
-
 def is_sector_related(article, sector_terms):
     title = (article.get('title') or "").lower()
     desc = (article.get('description') or "").lower()
     return any(term in title or term in desc for term in sector_terms)
 
-def get_news(api_key, per_sector=6, fallback_min=3):
+def get_news(api_key, per_sector=8, fallback_min=4):
     try:
         sector_results = {}
         for cat in categories:
@@ -102,21 +85,20 @@ def get_news(api_key, per_sector=6, fallback_min=3):
                 art for art in resp.json().get("articles", [])
                 if is_fresh(art)
             ]
-            # Market-moving (priority)
-            moving = [
-                (art["title"], art["publishedAt"], art["url"], True)
-                for art in fresh_articles if is_market_moving(art, sector_terms)
+            related = [
+                (art["title"], art["publishedAt"], art["url"])
+                for art in fresh_articles if is_sector_related(art, sector_terms)
             ]
-            # If not enough, backfill with sector-related news
-            if len(moving) < fallback_min:
-                additional = [
-                    (art["title"], art["publishedAt"], art["url"], False)
-                    for art in fresh_articles if is_sector_related(art, sector_terms) and (art["title"], art["publishedAt"], art["url"], False) not in moving
-                ]
-                moving += additional[:max(fallback_min, per_sector) - len(moving)]
-            # Limit total per sector
-            if moving:
-                sector_results[cat] = moving[:per_sector]
+            # If not enough, just add more fresh articles (for context, not perfect)
+            if len(related) < fallback_min:
+                for art in fresh_articles:
+                    tup = (art["title"], art["publishedAt"], art["url"])
+                    if tup not in related:
+                        related.append(tup)
+                    if len(related) >= fallback_min:
+                        break
+            if related:
+                sector_results[cat] = related[:per_sector]
         return sector_results
     except Exception as e:
         logging.error(f"News API request failed: {str(e)}")
@@ -127,7 +109,7 @@ def send_email(content, email_config):
         msg = MIMEMultipart()
         msg['From'] = email_config['sender_email']
         msg['To'] = email_config['receiver_email']
-        # Format the subject to "Daily News: mm/dd/yy"
+        # Format subject to "Daily News: m/d/yy"
         subject_date = datetime.now().strftime('%-m/%-d/%y') if hasattr(datetime.now(), 'strftime') else datetime.now().strftime('%m/%d/%y')
         msg['Subject'] = f"Daily News: {subject_date}"
         
@@ -137,11 +119,10 @@ def send_email(content, email_config):
             body = "<h2 style='color:#293241;font-family:sans-serif;'>📬 Your Daily News Digest</h2>"
             for cat, articles in content.items():
                 body += f"<h3 style='color:#1565c0;font-family:sans-serif;margin-bottom:0;'>{cat.upper()}</h3><ul style='margin-top:5px;'>"
-                for title, date, url, is_moving in articles:
-                    prefix = "<span style='color:#20b400;font-size:13px;'>[Market-moving]</span> " if is_moving else "<span style='color:#888;font-size:13px;'>[Sector news]</span> "
+                for title, date, url in articles:
                     body += (
                         f"<li style='margin-bottom:10px;font-family:sans-serif;'>"
-                        f"{prefix}<a href='{url}' style='font-weight:bold; color:#183153; text-decoration:none;'>{title}</a> "
+                        f"<a href='{url}' style='font-weight:bold; color:#183153; text-decoration:none;'>{title}</a> "
                         f"<span style='color:#888; font-size:90%;'>({date[:10]})</span>"
                         f"</li>"
                     )
