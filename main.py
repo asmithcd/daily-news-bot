@@ -8,46 +8,33 @@ from datetime import datetime, timezone, timedelta
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-DOMAINS = (
-    "reuters.com,wsj.com,bloomberg.com,marketwatch.com,ft.com,cnbc.com,forbes.com,"
-    "finance.yahoo.com,nytimes.com,bizjournals.com,autonews.com,greentechmedia.com,"
-    "pv-magazine.com,rvbusiness.com,cycleworld.com,motorcycle.com,appliancebusiness.com"
-)
-
-SECTOR_TERMS = {
-    "auto dealers": [
-        "auto dealer", "dealership", "car dealership", "car sales", "autonation", "group 1 automotive", "lad", "pag", "an", "cargurus", "carmax", "autotrader"
-    ],
-    "auto manufacturers": [
-        "automaker", "car maker", "vehicle manufacturer", "ford", "gm", "general motors", "tesla", "toyota", "stellantis", "hyundai", "honda", "volkswagen", "f", "tsla", "tm", "hmc", "stla", "vw"
-    ],
-    "auto parts": [
-        "auto part", "autoparts", "supplier", "magna", "dormakaba", "aap", "genuine parts", "borgwarner", "delphi", "components", "aftermarket"
-    ],
-    "solar": [
-        "solar", "pv", "photovoltaic", "first solar", "enphase", "solar edge", "maxeon", "sunpower"
-    ],
-    "pool industry": [
-        "pool supply", "poolcorp", "swimming pool", "pool equipment", "hayward"
-    ],
-    "mattress": [
-        "mattress", "sleep number", "tempur", "sealy", "casper", "simmons"
-    ],
-    "appliances": [
-        "appliance", "whirlpool", "electrolux", "frigidaire", "maytag", "lg electronics", "haier", "samsung appliances", "bosch appliances"
-    ],
-    "powersports": [
-        "powersport", "atv", "utv", "polaris", "brp", "yamaha", "can-am", "arctic cat"
-    ],
-    "motorcycles": [
-        "motorcycle", "harley-davidson", "ducati", "yamaha", "honda", "ktm", "indian motorcycle"
-    ],
-    "rv": [
-        "rv", "recreational vehicle", "winnebago", "thor", "forest river", "jayco", "motorhome", "travel trailer"
-    ]
+DISPLAY_NAMES = {
+    "appliances": "Appliances",
+    "auto dealers": "Auto Dealers",
+    "auto manufacturers": "Auto Manufacturers",
+    "auto parts": "Auto Parts",
+    "mattresses": "Mattresses",
+    "motorcycles": "Motorcycles",
+    "pool industry": "Pool Industry",
+    "powersports": "Powersports",
+    "rvs": "RVs",
+    "solar": "Solar"
 }
 
-categories = list(SECTOR_TERMS.keys())
+sector_queries = {
+    "auto dealers": "auto dealers",
+    "auto manufacturers": "auto manufacturers",
+    "auto parts": "auto parts",
+    "solar": "solar",
+    "pool industry": "pool industry",
+    "mattresses": "mattresses",
+    "appliances": "appliances",
+    "powersports": "powersports",
+    "motorcycles": "motorcycles",
+    "rvs": "rvs"
+}
+
+categories = sorted(DISPLAY_NAMES.keys(), key=lambda x: DISPLAY_NAMES[x])
 
 def is_fresh(article, hours=36):
     published = article.get("publishedAt")
@@ -55,50 +42,32 @@ def is_fresh(article, hours=36):
         return False
     try:
         published_dt = datetime.strptime(published, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    except ValueError:
+    except Exception:
         return False
     return (datetime.now(timezone.utc) - published_dt) <= timedelta(hours=hours)
 
-def is_sector_related(article, sector_terms):
-    title = (article.get('title') or "").lower()
-    desc = (article.get('description') or "").lower()
-    return any(term in title or term in desc for term in sector_terms)
-
-def get_news(api_key, per_sector=8, fallback_min=4):
+def get_news(api_key):
     try:
         sector_results = {}
         for cat in categories:
             resp = requests.get(
                 "https://newsapi.org/v2/everything",
                 params={
-                    "q": cat,
+                    "q": sector_queries[cat],
                     "apiKey": api_key,
                     "sortBy": "publishedAt",
-                    "pageSize": 40,
-                    "domains": DOMAINS
+                    "pageSize": 50
                 },
                 timeout=10
             )
             resp.raise_for_status()
-            sector_terms = SECTOR_TERMS[cat]
-            fresh_articles = [
-                art for art in resp.json().get("articles", [])
+            articles = [
+                (art["title"], art["publishedAt"], art["url"])
+                for art in resp.json().get("articles", [])
                 if is_fresh(art)
             ]
-            related = [
-                (art["title"], art["publishedAt"], art["url"])
-                for art in fresh_articles if is_sector_related(art, sector_terms)
-            ]
-            # If not enough, just add more fresh articles (for context, not perfect)
-            if len(related) < fallback_min:
-                for art in fresh_articles:
-                    tup = (art["title"], art["publishedAt"], art["url"])
-                    if tup not in related:
-                        related.append(tup)
-                    if len(related) >= fallback_min:
-                        break
-            if related:
-                sector_results[cat] = related[:per_sector]
+            if articles:
+                sector_results[cat] = articles
         return sector_results
     except Exception as e:
         logging.error(f"News API request failed: {str(e)}")
@@ -109,31 +78,33 @@ def send_email(content, email_config):
         msg = MIMEMultipart()
         msg['From'] = email_config['sender_email']
         msg['To'] = email_config['receiver_email']
-        # Format subject to "Daily News: m/d/yy"
-        subject_date = datetime.now().strftime('%-m/%-d/%y') if hasattr(datetime.now(), 'strftime') else datetime.now().strftime('%m/%d/%y')
+        subject_date = datetime.now().strftime('%-m/%-d/%y')
         msg['Subject'] = f"Daily News: {subject_date}"
-        
+
         if not content or all(len(arts) == 0 for arts in content.values()):
             body = "<p><b>No sector news articles were found today.</b></p>"
         else:
-            body = "<h2 style='color:#293241;font-family:sans-serif;'>📬 Your Daily News Digest</h2>"
-            for cat, articles in content.items():
-                body += f"<h3 style='color:#1565c0;font-family:sans-serif;margin-bottom:0;'>{cat.upper()}</h3><ul style='margin-top:5px;'>"
-                for title, date, url in articles:
-                    body += (
-                        f"<li style='margin-bottom:10px;font-family:sans-serif;'>"
-                        f"<a href='{url}' style='font-weight:bold; color:#183153; text-decoration:none;'>{title}</a> "
-                        f"<span style='color:#888; font-size:90%;'>({date[:10]})</span>"
-                        f"</li>"
-                    )
-                body += "</ul>"
+            body = "<h2 style='font-family:sans-serif;color:#293241;'>📬 Your Daily News Digest</h2>"
+            for cat in categories:
+                if cat in content:
+                    articles = content[cat]
+                    section = DISPLAY_NAMES.get(cat, cat).upper()
+                    body += f"<h3 style='font-family:sans-serif;color:#1565c0;margin-bottom:0;'>{section}</h3><ul style='margin-top:5px;'>"
+                    for title, date, url in articles:
+                        body += (
+                            f"<li style='font-family:sans-serif;margin-bottom:10px;'>"
+                            f"<a href='{url}' style='font-weight:bold;color:#183153;text-decoration:none;'>{title}</a> "
+                            f"<span style='color:#888;font-size:90%;'>({date[:10]})</span>"
+                            f"</li>"
+                        )
+                    body += "</ul>"
         msg.attach(MIMEText(body, 'html'))
 
         with smtplib.SMTP_SSL(email_config['smtp_server'], email_config['smtp_port'], timeout=15) as server:
             server.login(email_config['sender_email'], email_config['smtp_password'])
             server.send_message(msg)
             logging.info("Email sent successfully")
-    except (smtplib.SMTPException, Exception) as e:
+    except Exception as e:
         logging.error(f"Failed to send email: {str(e)}")
         raise
 
@@ -146,7 +117,7 @@ def validate_config(config):
         raise ValueError("Missing environment variables")
     try:
         config['smtp_port'] = int(config['smtp_port'])
-    except ValueError:
+    except Exception:
         logging.error("Invalid SMTP_PORT value")
         raise
 
