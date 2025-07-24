@@ -14,43 +14,57 @@ DOMAINS = (
     "pv-magazine.com,rvbusiness.com,cycleworld.com,motorcycle.com,appliancebusiness.com"
 )
 
-# For these sectors, require headline match to prevent pop culture/lifestyle noise
-TIGHT_HEADLINE_ONLY = {"pool industry", "mattress", "appliances", "rv"}
+DISPLAY_NAMES = {
+    "appliances": "Appliances",
+    "auto dealers": "Auto Dealers",
+    "auto manufacturers": "Auto Manufacturers",
+    "auto parts": "Auto Parts",
+    "mattresses": "Mattresses",
+    "motorcycles": "Motorcycles",
+    "pool industry": "Pool Industry",
+    "powersports": "Powersports",
+    "rvs": "RVs",
+    "solar": "Solar"
+}
 
 SECTOR_TERMS = {
     "auto dealers": [
-        "auto dealer", "dealership", "car dealership", "car sales", "autonation", "group 1 automotive", "lad", "pag", "an", "cargurus", "carmax", "autotrader"
+        "autonation", "group 1 automotive", "lithia", "sonic automotive", "penske automotive",
+        "asbury automotive", "carmax", "cargurus"
     ],
     "auto manufacturers": [
-        "automaker", "car maker", "vehicle manufacturer", "ford", "gm", "general motors", "tesla", "toyota", "stellantis", "hyundai", "honda", "volkswagen", "f", "tsla", "tm", "hmc", "stla", "vw"
+        "ford", "general motors", "gm", "tesla", "toyota", "stellantis", "hyundai", "honda",
+        "volkswagen", "mercedes", "bmw", "nissan"
     ],
     "auto parts": [
-        "auto part", "autoparts", "supplier", "magna", "dormakaba", "aap", "genuine parts", "borgwarner", "delphi", "components", "aftermarket"
+        "oreilly", "o'reilly", "advance auto", "advance auto parts", "autozone", "genuine parts",
+        "gpc", "dorman", "borgwarner", "delphi", "magna", "lkq", "standard motor products"
     ],
     "solar": [
-        "solar", "pv", "photovoltaic", "first solar", "enphase", "solar edge", "maxeon", "sunpower"
+        "first solar", "enphase", "solar edge", "maxeon", "sunpower", "sunrun", "solarcity"
     ],
     "pool industry": [
-        "poolcorp", "poolcorp inc", "pool supply", "commercial pool", "swimming pool equipment", "hayward", "pool product", "pool manufacturer"
+        "poolcorp", "hayward", "pentair", "leslie's", "fluidra", "zodiac pool"
     ],
-    "mattress": [
-        "mattress company", "mattress firm", "mattress manufacturer", "sleep number", "tempur", "sealy", "casper", "simmons"
+    "mattresses": [
+        "tempur", "sleep number", "sealy", "casper", "simmons", "purple innovation", "tuft & needle"
     ],
     "appliances": [
-        "appliance manufacturer", "appliance company", "whirlpool", "electrolux", "frigidaire", "maytag", "lg electronics", "haier", "samsung appliances", "bosch appliances"
+        "whirlpool", "electrolux", "frigidaire", "maytag", "lg electronics", "haier", "bosch",
+        "samsung appliances", "ge appliances"
     ],
     "powersports": [
-        "powersport", "atv", "utv", "polaris", "brp", "yamaha", "can-am", "arctic cat"
+        "polaris", "brp", "can-am", "yamaha", "arctic cat", "sea-doo", "ski-doo"
     ],
     "motorcycles": [
-        "motorcycle", "harley-davidson", "ducati", "yamaha", "honda", "ktm", "indian motorcycle"
+        "harley-davidson", "ducati", "ktm", "yamaha", "honda", "indian motorcycle"
     ],
-    "rv": [
-        "rv manufacturer", "rv company", "winnebago", "thor", "forest river", "jayco", "motorhome manufacturer", "travel trailer manufacturer"
+    "rvs": [
+        "winnebago", "thor", "forest river", "jayco", "rev group", "newmar", "airstream"
     ]
 }
 
-categories = list(SECTOR_TERMS.keys())
+categories = sorted(DISPLAY_NAMES.keys(), key=lambda x: DISPLAY_NAMES[x])
 
 def is_fresh(article, hours=36):
     published = article.get("publishedAt")
@@ -62,14 +76,10 @@ def is_fresh(article, hours=36):
         return False
     return (datetime.now(timezone.utc) - published_dt) <= timedelta(hours=hours)
 
-def is_sector_related(article, sector_terms, sector, tight_headline_only=TIGHT_HEADLINE_ONLY):
+def is_sector_related(article, sector_terms):
     title = (article.get('title') or "").lower()
-    desc = (article.get('description') or "").lower()
-    # For noisy sectors, require sector term in headline only
-    if sector in tight_headline_only:
-        return any(term in title for term in sector_terms)
-    else:
-        return any(term in title or term in desc for term in sector_terms)
+    # Only use the headline for matching.
+    return any(term in title for term in sector_terms)
 
 def get_news(api_key, per_sector=8, fallback_min=3):
     try:
@@ -94,10 +104,9 @@ def get_news(api_key, per_sector=8, fallback_min=3):
             ]
             relevant = [
                 (art["title"], art["publishedAt"], art["url"])
-                for art in fresh_articles if is_sector_related(art, sector_terms, cat)
+                for art in fresh_articles if is_sector_related(art, sector_terms)
             ]
             if len(relevant) < fallback_min:
-                # Backfill with just-fresh (if necessary) but ONLY if nothing sector relevant found
                 for art in fresh_articles:
                     tup = (art["title"], art["publishedAt"], art["url"])
                     if tup not in relevant:
@@ -116,7 +125,6 @@ def send_email(content, email_config):
         msg = MIMEMultipart()
         msg['From'] = email_config['sender_email']
         msg['To'] = email_config['receiver_email']
-        # Format subject to "Daily News: m/d/yy"
         subject_date = datetime.now().strftime('%-m/%-d/%y') if hasattr(datetime.now(), 'strftime') else datetime.now().strftime('%m/%d/%y')
         msg['Subject'] = f"Daily News: {subject_date}"
         
@@ -124,16 +132,19 @@ def send_email(content, email_config):
             body = "<p><b>No sector news articles were found today.</b></p>"
         else:
             body = "<h2 style='color:#293241;font-family:sans-serif;'>📬 Your Daily News Digest</h2>"
-            for cat, articles in content.items():
-                body += f"<h3 style='color:#1565c0;font-family:sans-serif;margin-bottom:0;'>{cat.upper()}</h3><ul style='margin-top:5px;'>"
-                for title, date, url in articles:
-                    body += (
-                        f"<li style='margin-bottom:10px;font-family:sans-serif;'>"
-                        f"<a href='{url}' style='font-weight:bold; color:#183153; text-decoration:none;'>{title}</a> "
-                        f"<span style='color:#888; font-size:90%;'>({date[:10]})</span>"
-                        f"</li>"
-                    )
-                body += "</ul>"
+            for cat in categories:
+                if cat in content:
+                    articles = content[cat]
+                    section = DISPLAY_NAMES.get(cat, cat).upper()
+                    body += f"<h3 style='color:#1565c0;font-family:sans-serif;margin-bottom:0;'>{section}</h3><ul style='margin-top:5px;'>"
+                    for title, date, url in articles:
+                        body += (
+                            f"<li style='margin-bottom:10px;font-family:sans-serif;'>"
+                            f"<a href='{url}' style='font-weight:bold; color:#183153; text-decoration:none;'>{title}</a> "
+                            f"<span style='color:#888; font-size:90%;'>({date[:10]})</span>"
+                            f"</li>"
+                        )
+                    body += "</ul>"
         msg.attach(MIMEText(body, 'html'))
 
         with smtplib.SMTP_SSL(email_config['smtp_server'], email_config['smtp_port'], timeout=15) as server:
