@@ -29,43 +29,47 @@ DISPLAY_NAMES = {
 
 SECTOR_TERMS = {
     "auto dealers": [
-        "auto dealer", "dealership", "car dealership", "car sales", "autonation", "group 1 automotive", "lithia", "sonic automotive", "penske automotive", "asbury automotive", "carmax", "cargurus"
+        "auto dealer", "dealership", "car dealership", "car sales", "autonation", "group 1 automotive",
+        "lithia", "sonic automotive", "penske automotive", "asbury automotive", "carmax", "cargurus"
     ],
     "auto manufacturers": [
-        "automaker", "car maker", "vehicle manufacturer", "ford", "general motors", "gm", "tesla", "toyota", "stellantis", "hyundai", "honda", "volkswagen", "mercedes", "bmw", "nissan"
+        "automaker", "car maker", "vehicle manufacturer", "ford", "general motors", "gm", "tesla",
+        "toyota", "stellantis", "hyundai", "honda", "volkswagen", "mercedes", "bmw", "nissan"
     ],
     "auto parts": [
-        "auto parts", "parts retailer", "oreilly", "o'reilly", "advance auto", "advance auto parts", "autozone", "genuine parts", "gpc", "dorman", "borgwarner", "delphi", "magna", "lkq", "standard motor products"
+        "auto part", "auto parts", "parts retailer", "oreilly", "o'reilly", "advance auto",
+        "advance auto parts", "autozone", "genuine parts", "gpc", "dorman", "borgwarner", "delphi",
+        "magna", "lkq", "standard motor products"
     ],
     "solar": [
-        "solar", "photovoltaic", "pv", "first solar", "enphase", "solar edge", "maxeon", "sunpower", "sunrun", "solarcity"
+        "solar", "photovoltaic", "pv", "first solar", "enphase", "solar edge", "maxeon", "sunpower",
+        "sunrun", "solarcity"
     ],
     "pool industry": [
-        "poolcorp", "hayward", "pentair", "leslie's", "fluidra", "zodiac pool", "commercial pool", "swimming pool equipment", "pool equipment", "pool manufacturer", "pool supply"
+        "poolcorp", "hayward", "pentair", "leslie's", "fluidra", "zodiac pool", "commercial pool",
+        "swimming pool equipment", "pool equipment", "pool manufacturer", "pool supply", "pool"
     ],
     "mattresses": [
-        "mattress", "mattress company", "mattress manufacturer", "tempur", "sleep number", "sealy", "casper", "simmons", "purple innovation", "tuft & needle"
+        "mattress", "mattresses", "mattress company", "mattress manufacturer", "tempur", "sleep number",
+        "sealy", "casper", "simmons", "purple innovation", "tuft & needle"
     ],
     "appliances": [
-        "appliance", "appliance manufacturer", "appliance company", "whirlpool", "electrolux", "frigidaire", "maytag", "lg electronics", "haier", "bosch", "samsung appliances", "ge appliances"
+        "appliance", "appliances", "appliance manufacturer", "appliance company", "whirlpool",
+        "electrolux", "frigidaire", "maytag", "lg electronics", "haier", "bosch",
+        "samsung appliances", "ge appliances"
     ],
     "powersports": [
-        "powersport", "atv", "utv", "polaris", "brp", "can-am", "yamaha", "arctic cat", "sea-doo", "ski-doo"
+        "powersport", "powersports", "atv", "utv", "polaris", "brp", "can-am", "yamaha", "arctic cat",
+        "sea-doo", "ski-doo"
     ],
     "motorcycles": [
         "motorcycle", "motorcycles", "harley-davidson", "ducati", "ktm", "yamaha", "honda", "indian motorcycle"
     ],
     "rvs": [
-        "rv", "rvs", "motorhome", "travel trailer", "winnebago", "thor", "forest river", "jayco", "rev group", "newmar", "airstream"
+        "rv", "rvs", "motorhome", "travel trailer", "winnebago", "thor", "forest river", "jayco",
+        "rev group", "newmar", "airstream"
     ]
 }
-
-# Words that should never allow a match (pop culture, hotels, travel, TV, etc)
-MUST_NOT = [
-    "hotel", "resort", "spa", "netflix", "movie", "series", "show", "binge", "streaming",
-    "music", "concert", "festival", "tourism", "restaurant", "cuisine", "celebrity", "tv", "film",
-    "fashion", "style", "makeup", "beauty", "beach", "museum", "travel", "luxury stay", "vacation"
-]
 
 categories = sorted(DISPLAY_NAMES.keys(), key=lambda x: DISPLAY_NAMES[x])
 
@@ -82,10 +86,7 @@ def is_fresh(article, hours=36):
 def is_sector_related(article, sector_terms):
     title = (article.get('title') or "").lower()
     desc = (article.get('description') or "").lower()
-    combined = f"{title} {desc}"
-    if any(bad in combined for bad in MUST_NOT):
-        return False
-    return any(term in combined for term in sector_terms)
+    return any(term in title or term in desc for term in sector_terms)
 
 def get_news(api_key):
     try:
