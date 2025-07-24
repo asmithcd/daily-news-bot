@@ -24,14 +24,8 @@ categories = [
 # Fetching top news across multiple industries from NewsAPI 
 def get_news(api_key):
     try:
-        date = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d') # Get yesterday's date to fetch relevant news
-        url = f"https://newsapi.org/v2/top-headlines?q={category}&from={date}&sortBy=popularity&apiKey={api_key}"
-      
-        # Making the API request with a timeout of 10 seconds
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()  # Raise exception for 4xx/5xx errors (HTTP errors)
-      
-       all_articles = []
+        # any code above
+        all_articles = []
         for cat in categories:
             resp = requests.get(
                 "https://newsapi.org/v2/everything",
@@ -52,9 +46,9 @@ def get_news(api_key):
 
         return all_articles
 
-    except requests.exceptions.RequestException as e: 
+    except Exception as e:
         logging.error(f"News API request failed: {str(e)}")
-        return None # Return None in case of an error
+        return None
       
 # Function to send email with fetched news
 def send_email(content, email_config):
@@ -66,9 +60,9 @@ def send_email(content, email_config):
         
         # Creating the email body
         body = "📬 Your Daily Market News Digest:\n\n"
-for cat, title, date, url in all_articles:
-    body += f"[{cat.upper()}] {title} ({date})\n{url}\n\n"
-msg.attach(MIMEText(body, 'plain'))
+        for cat, title, date, url in content:
+            body += f"[{cat.upper()}] {title} ({date})\n{url}\n\n"
+        msg.attach(MIMEText(body, 'plain'))
       
         # Connecting to SMTP server using SSL
         with smtplib.SMTP_SSL(email_config['smtp_server'], email_config['smtp_port'], timeout=15) as server:
