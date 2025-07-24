@@ -21,48 +21,17 @@ DISPLAY_NAMES = {
     "solar": "Solar"
 }
 
-SECTOR_TERMS = {
-    "auto dealers": [
-        "auto dealer", "dealership", "car dealership", "car sales", "autonation", "group 1 automotive",
-        "lithia", "sonic automotive", "penske automotive", "asbury automotive", "carmax", "cargurus"
-    ],
-    "auto manufacturers": [
-        "automaker", "car maker", "vehicle manufacturer", "ford", "general motors", "gm", "tesla",
-        "toyota", "stellantis", "hyundai", "honda", "volkswagen", "mercedes", "bmw", "nissan"
-    ],
-    "auto parts": [
-        "auto part", "auto parts", "parts retailer", "oreilly", "o'reilly", "advance auto",
-        "advance auto parts", "autozone", "genuine parts", "gpc", "dorman", "borgwarner", "delphi",
-        "magna", "lkq", "standard motor products"
-    ],
-    "solar": [
-        "solar", "photovoltaic", "pv", "first solar", "enphase", "solar edge", "maxeon", "sunpower",
-        "sunrun", "solarcity"
-    ],
-    "pool industry": [
-        "poolcorp", "hayward", "pentair", "leslie's", "fluidra", "zodiac pool", "commercial pool",
-        "swimming pool equipment", "pool equipment", "pool manufacturer", "pool supply", "pool"
-    ],
-    "mattresses": [
-        "mattress", "mattresses", "mattress company", "mattress manufacturer", "tempur", "sleep number",
-        "sealy", "casper", "simmons", "purple innovation", "tuft & needle"
-    ],
-    "appliances": [
-        "appliance", "appliances", "appliance manufacturer", "appliance company", "whirlpool",
-        "electrolux", "frigidaire", "maytag", "lg electronics", "haier", "bosch",
-        "samsung appliances", "ge appliances"
-    ],
-    "powersports": [
-        "powersport", "powersports", "atv", "utv", "polaris", "brp", "can-am", "yamaha", "arctic cat",
-        "sea-doo", "ski-doo"
-    ],
-    "motorcycles": [
-        "motorcycle", "motorcycles", "harley-davidson", "ducati", "ktm", "yamaha", "honda", "indian motorcycle"
-    ],
-    "rvs": [
-        "rv", "rvs", "motorhome", "travel trailer", "winnebago", "thor", "forest river", "jayco",
-        "rev group", "newmar", "airstream"
-    ]
+sector_queries = {
+    "auto dealers": "auto dealers",
+    "auto manufacturers": "auto manufacturers",
+    "auto parts": "auto parts",
+    "solar": "solar",
+    "pool industry": "pool industry",
+    "mattresses": "mattresses",
+    "appliances": "appliances",
+    "powersports": "powersports",
+    "motorcycles": "motorcycles",
+    "rvs": "rvs"
 }
 
 categories = sorted(DISPLAY_NAMES.keys(), key=lambda x: DISPLAY_NAMES[x])
@@ -73,25 +42,18 @@ def is_fresh(article, hours=36):
         return False
     try:
         published_dt = datetime.strptime(published, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    except ValueError:
+    except Exception:
         return False
     return (datetime.now(timezone.utc) - published_dt) <= timedelta(hours=hours)
-
-def is_sector_related(article, sector_terms):
-    title = (article.get('title') or "").lower()
-    desc = (article.get('description') or "").lower()
-    combined = f"{title} {desc}"
-    return any(term in combined for term in sector_terms)
 
 def get_news(api_key):
     try:
         sector_results = {}
         for cat in categories:
-            query = cat.split()[0] if cat != "auto manufacturers" else "automaker"  # e.g., "solar" or "mattress"
             resp = requests.get(
                 "https://newsapi.org/v2/everything",
                 params={
-                    "q": query,
+                    "q": sector_queries[cat],
                     "apiKey": api_key,
                     "sortBy": "publishedAt",
                     "pageSize": 50
@@ -99,17 +61,13 @@ def get_news(api_key):
                 timeout=10
             )
             resp.raise_for_status()
-            sector_terms = SECTOR_TERMS[cat]
-            fresh_articles = [
-                art for art in resp.json().get("articles", [])
+            articles = [
+                (art["title"], art["publishedAt"], art["url"])
+                for art in resp.json().get("articles", [])
                 if is_fresh(art)
             ]
-            relevant = [
-                (art["title"], art["publishedAt"], art["url"])
-                for art in fresh_articles if is_sector_related(art, sector_terms)
-            ]
-            if relevant:
-                sector_results[cat] = relevant
+            if articles:
+                sector_results[cat] = articles
         return sector_results
     except Exception as e:
         logging.error(f"News API request failed: {str(e)}")
@@ -122,7 +80,7 @@ def send_email(content, email_config):
         msg['To'] = email_config['receiver_email']
         subject_date = datetime.now().strftime('%-m/%-d/%y') if hasattr(datetime.now(), 'strftime') else datetime.now().strftime('%m/%d/%y')
         msg['Subject'] = f"Daily News: {subject_date}"
-        
+
         if not content or all(len(arts) == 0 for arts in content.values()):
             body = "<p><b>No sector news articles were found today.</b></p>"
         else:
@@ -146,7 +104,7 @@ def send_email(content, email_config):
             server.login(email_config['sender_email'], email_config['smtp_password'])
             server.send_message(msg)
             logging.info("Email sent successfully")
-    except (smtplib.SMTPException, Exception) as e:
+    except Exception as e:
         logging.error(f"Failed to send email: {str(e)}")
         raise
 
@@ -159,7 +117,7 @@ def validate_config(config):
         raise ValueError("Missing environment variables")
     try:
         config['smtp_port'] = int(config['smtp_port'])
-    except ValueError:
+    except Exception:
         logging.error("Invalid SMTP_PORT value")
         raise
 
