@@ -7,8 +7,7 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone, timedelta
 
 # Logging setup
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 RELEVANT_KEYWORDS = [
     "earnings", "tariff", "tariffs", "trade war", "acquisition", "merger", "guidance",
@@ -25,11 +24,40 @@ DOMAINS = (
     "pv-magazine.com,rvbusiness.com,cycleworld.com,motorcycle.com,appliancebusiness.com"
 )
 
-categories = [
-    "auto dealers", "auto manufacturers", "auto parts",
-    "solar", "pool industry", "mattress", "appliances",
-    "powersports", "motorcycles", "rv"
-]
+SECTOR_TERMS = {
+    "auto dealers": [
+        "auto dealer", "dealership", "car dealership", "car sales", "autonation", "group 1 automotive", "lad", "pag", "an", "cargurus", "carmax", "autotrader"
+    ],
+    "auto manufacturers": [
+        "automaker", "car maker", "vehicle manufacturer", "ford", "gm", "general motors", "tesla", "toyota", "stellantis", "hyundai", "honda", "volkswagen", "f", "tsla", "tm", "hmc", "stla", "vw"
+    ],
+    "auto parts": [
+        "auto part", "autoparts", "supplier", "magna", "dormakaba", "aap", "genuine parts", "borgwarner", "delphi", "components", "aftermarket"
+    ],
+    "solar": [
+        "solar", "pv", "photovoltaic", "first solar", "enphase", "solar edge", "maxeon", "sunpower"
+    ],
+    "pool industry": [
+        "pool supply", "poolcorp", "swimming pool", "pool equipment", "hayward"
+    ],
+    "mattress": [
+        "mattress", "sleep number", "tempur", "sealy", "casper", "simmons"
+    ],
+    "appliances": [
+        "appliance", "whirlpool", "electrolux", "frigidaire", "maytag", "lg electronics", "haier", "samsung appliances", "bosch appliances"
+    ],
+    "powersports": [
+        "powersport", "atv", "utv", "polaris", "brp", "yamaha", "can-am", "arctic cat"
+    ],
+    "motorcycles": [
+        "motorcycle", "harley-davidson", "ducati", "yamaha", "honda", "ktm", "indian motorcycle"
+    ],
+    "rv": [
+        "rv", "recreational vehicle", "winnebago", "thor", "forest river", "jayco", "motorhome", "travel trailer"
+    ]
+}
+
+categories = list(SECTOR_TERMS.keys())
 
 def is_fresh(article, hours=36):
     published = article.get("publishedAt")
@@ -41,14 +69,17 @@ def is_fresh(article, hours=36):
         return False
     return (datetime.now(timezone.utc) - published_dt) <= timedelta(hours=hours)
 
-def is_relevant(article):
-    title = article.get('title', '').lower()
-    desc = article.get('description', '').lower()
-    return any(word in title or word in desc for word in RELEVANT_KEYWORDS)
+def is_final_match(article, sector_terms):
+    title = (article.get('title') or "").lower()
+    desc = (article.get('description') or "").lower()
+    return (
+        any(word in title or word in desc for word in RELEVANT_KEYWORDS) and
+        any(term in title or term in desc for term in sector_terms)
+    )
 
 def get_news(api_key):
     try:
-        all_articles = []
+        sector_results = {}
         for cat in categories:
             resp = requests.get(
                 "https://newsapi.org/v2/everything",
@@ -56,18 +87,22 @@ def get_news(api_key):
                     "q": cat,
                     "apiKey": api_key,
                     "sortBy": "publishedAt",
-                    "pageSize": 30,  # larger pool, filter later
+                    "pageSize": 30,
                     "domains": DOMAINS
                 },
                 timeout=10
             )
             resp.raise_for_status()
+            sector_terms = SECTOR_TERMS[cat]
+            articles = []
             for art in resp.json().get("articles", []):
-                if is_fresh(art) and is_relevant(art):
-                    all_articles.append((cat, art["title"], art["publishedAt"], art["url"]))
-        if not all_articles:
+                if is_fresh(art) and is_final_match(art, sector_terms):
+                    articles.append((art["title"], art["publishedAt"], art["url"]))
+            if articles:
+                sector_results[cat] = articles
+        if not sector_results:
             logging.warning("No market-moving articles found across all categories")
-        return all_articles
+        return sector_results
     except Exception as e:
         logging.error(f"News API request failed: {str(e)}")
         return None
@@ -77,25 +112,31 @@ def send_email(content, email_config):
         msg = MIMEMultipart()
         msg['From'] = email_config['sender_email']
         msg['To'] = email_config['receiver_email']
-        msg['Subject'] = f"📰 Daily Market-Moving News Digest - {datetime.utcnow().strftime('%Y-%m-%d')}"
-
+        msg['Subject'] = f"📰 <b>Daily Market-Moving News Digest</b> - {datetime.utcnow().strftime('%Y-%m-%d')}"
+        
+        # HTML body start
         if not content:
-            body = "No market-moving articles were found today."
+            body = "<p><b>No market-moving articles were found today.</b></p>"
         else:
-            body = "📬 Your Daily Market-Moving Industry News:\n\n"
-            last_cat = None
-            for cat, title, date, url in sorted(content, key=lambda x: x[0]):
-                if cat != last_cat:
-                    body += f"\n==== {cat.upper()} ====\n"
-                    last_cat = cat
-                body += f"- {title} ({date[:10]})\n  {url}\n"
-        msg.attach(MIMEText(body, 'plain'))
+            body = "<h2 style='color:#293241;'>📬 Your Daily Market-Moving Industry News</h2>"
+            for cat, articles in content.items():
+                body += f"<h3 style='color:#1565c0;'>{cat.upper()}</h3><ul>"
+                for title, date, url in articles:
+                    # Each article: title as bold link, date small
+                    body += (
+                        f"<li style='margin-bottom:10px;'>"
+                        f"<a href='{url}' style='font-weight:bold; color:#183153; text-decoration:none;'>{title}</a> "
+                        f"<span style='color:#888; font-size:90%;'>({date[:10]})</span>"
+                        f"</li>"
+                    )
+                body += "</ul>"
+        msg.attach(MIMEText(body, 'html'))
 
         with smtplib.SMTP_SSL(email_config['smtp_server'], email_config['smtp_port'], timeout=15) as server:
             server.login(email_config['sender_email'], email_config['smtp_password'])
             server.send_message(msg)
             logging.info("Email sent successfully")
-    except (smtplib.SMTPException, Exception) as e: 
+    except (smtplib.SMTPException, Exception) as e:
         logging.error(f"Failed to send email: {str(e)}")
         raise
 
@@ -122,13 +163,11 @@ if __name__ == "__main__":
             'smtp_password': os.getenv('SMTP_PASSWORD'),
             'newsapi_key': os.getenv('NEWSAPI_KEY')
         }
-
         logging.info(f"Loaded config: {config}")
         validate_config(config)
         logging.info("Configuration validated successfully")
 
         news_content = get_news(config['newsapi_key'])
-
         if news_content:
             send_email(news_content, config)
         else:
