@@ -100,29 +100,25 @@ def get_news(api_key):
                     articles.append((art["title"], art["publishedAt"], art["url"]))
             if articles:
                 sector_results[cat] = articles
-        if not sector_results:
-            logging.warning("No market-moving articles found across all categories")
-        return sector_results
+        return sector_results  # will be empty dict if nothing found
     except Exception as e:
         logging.error(f"News API request failed: {str(e)}")
-        return None
+        return {}
 
 def send_email(content, email_config):
     try:
         msg = MIMEMultipart()
         msg['From'] = email_config['sender_email']
         msg['To'] = email_config['receiver_email']
-        msg['Subject'] = f"📰 <b>Daily Market-Moving News Digest</b> - {datetime.utcnow().strftime('%Y-%m-%d')}"
+        msg['Subject'] = f"📰 Daily Market-Moving News Digest - {datetime.utcnow().strftime('%Y-%m-%d')}"
         
-        # HTML body start
-        if not content:
+        if not content or all(len(arts) == 0 for arts in content.values()):
             body = "<p><b>No market-moving articles were found today.</b></p>"
         else:
             body = "<h2 style='color:#293241;'>📬 Your Daily Market-Moving Industry News</h2>"
             for cat, articles in content.items():
-                body += f"<h3 style='color:#1565c0;'>{cat.upper()}</h3><ul>"
+                body += f"<h3 style='color:#1565c0;margin-bottom:0;'>{cat.upper()}</h3><ul style='margin-top:5px;'>"
                 for title, date, url in articles:
-                    # Each article: title as bold link, date small
                     body += (
                         f"<li style='margin-bottom:10px;'>"
                         f"<a href='{url}' style='font-weight:bold; color:#183153; text-decoration:none;'>{title}</a> "
@@ -168,10 +164,8 @@ if __name__ == "__main__":
         logging.info("Configuration validated successfully")
 
         news_content = get_news(config['newsapi_key'])
-        if news_content:
-            send_email(news_content, config)
-        else:
-            logging.warning("No news content to send")
+        # Always send email—even if nothing is found (for visibility)
+        send_email(news_content or {}, config)
     except Exception as e:
         logging.error(f"Major failure: {str(e)}")
         raise
