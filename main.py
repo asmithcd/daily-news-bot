@@ -8,64 +8,46 @@ from datetime import datetime, timezone, timedelta
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-DISPLAY_NAMES = {
-    "appliances": "Appliances",
-    "auto dealers": "Auto Dealers",
-    "auto manufacturers": "Auto Manufacturers",
-    "auto parts": "Auto Parts",
-    "mattresses": "Mattresses",
-    "motorcycles": "Motorcycles",
-    "pool industry": "Pool Industry",
-    "powersports": "Powersports",
-    "rvs": "RVs",
-    "solar": "Solar"
-}
+DOMAINS = (
+    "reuters.com,wsj.com,bloomberg.com,marketwatch.com,ft.com,cnbc.com,forbes.com,"
+    "finance.yahoo.com,nytimes.com,bizjournals.com,autonews.com,greentechmedia.com,"
+    "pv-magazine.com,rvbusiness.com,cycleworld.com,motorcycle.com,appliancebusiness.com"
+)
 
 SECTOR_TERMS = {
     "auto dealers": [
-        "auto dealer", "dealership", "car dealership", "car sales", "autonation", "group 1 automotive",
-        "lithia", "sonic automotive", "penske automotive", "asbury automotive", "carmax", "cargurus"
+        "auto dealer", "dealership", "car dealership", "car sales", "autonation", "group 1 automotive", "lad", "pag", "an", "cargurus", "carmax", "autotrader"
     ],
     "auto manufacturers": [
-        "automaker", "car maker", "vehicle manufacturer", "ford", "general motors", "gm", "tesla",
-        "toyota", "stellantis", "hyundai", "honda", "volkswagen", "mercedes", "bmw", "nissan"
+        "automaker", "car maker", "vehicle manufacturer", "ford", "gm", "general motors", "tesla", "toyota", "stellantis", "hyundai", "honda", "volkswagen", "f", "tsla", "tm", "hmc", "stla", "vw"
     ],
     "auto parts": [
-        "auto part", "auto parts", "parts retailer", "oreilly", "o'reilly", "advance auto",
-        "advance auto parts", "autozone", "genuine parts", "gpc", "dorman", "borgwarner", "delphi",
-        "magna", "lkq", "standard motor products"
+        "auto part", "autoparts", "supplier", "magna", "dormakaba", "aap", "genuine parts", "borgwarner", "delphi", "components", "aftermarket"
     ],
     "solar": [
-        "solar", "photovoltaic", "pv", "first solar", "enphase", "solar edge", "maxeon", "sunpower",
-        "sunrun", "solarcity"
+        "solar", "pv", "photovoltaic", "first solar", "enphase", "solar edge", "maxeon", "sunpower"
     ],
     "pool industry": [
-        "poolcorp", "hayward", "pentair", "leslie's", "fluidra", "zodiac pool", "commercial pool",
-        "swimming pool equipment", "pool equipment", "pool manufacturer", "pool supply", "pool"
+        "pool supply", "poolcorp", "swimming pool", "pool equipment", "hayward"
     ],
-    "mattresses": [
-        "mattress", "mattresses", "mattress company", "mattress manufacturer", "tempur", "sleep number",
-        "sealy", "casper", "simmons", "purple innovation", "tuft & needle"
+    "mattress": [
+        "mattress", "sleep number", "tempur", "sealy", "casper", "simmons"
     ],
     "appliances": [
-        "appliance", "appliances", "appliance manufacturer", "appliance company", "whirlpool",
-        "electrolux", "frigidaire", "maytag", "lg electronics", "haier", "bosch",
-        "samsung appliances", "ge appliances"
+        "appliance", "whirlpool", "electrolux", "frigidaire", "maytag", "lg electronics", "haier", "samsung appliances", "bosch appliances"
     ],
     "powersports": [
-        "powersport", "powersports", "atv", "utv", "polaris", "brp", "can-am", "yamaha", "arctic cat",
-        "sea-doo", "ski-doo"
+        "powersport", "atv", "utv", "polaris", "brp", "yamaha", "can-am", "arctic cat"
     ],
     "motorcycles": [
-        "motorcycle", "motorcycles", "harley-davidson", "ducati", "ktm", "yamaha", "honda", "indian motorcycle"
+        "motorcycle", "harley-davidson", "ducati", "yamaha", "honda", "ktm", "indian motorcycle"
     ],
-    "rvs": [
-        "rv", "rvs", "motorhome", "travel trailer", "winnebago", "thor", "forest river", "jayco",
-        "rev group", "newmar", "airstream"
+    "rv": [
+        "rv", "recreational vehicle", "winnebago", "thor", "forest river", "jayco", "motorhome", "travel trailer"
     ]
 }
 
-categories = sorted(DISPLAY_NAMES.keys(), key=lambda x: DISPLAY_NAMES[x])
+categories = list(SECTOR_TERMS.keys())
 
 def is_fresh(article, hours=36):
     published = article.get("publishedAt")
@@ -73,7 +55,7 @@ def is_fresh(article, hours=36):
         return False
     try:
         published_dt = datetime.strptime(published, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    except Exception:
+    except ValueError:
         return False
     return (datetime.now(timezone.utc) - published_dt) <= timedelta(hours=hours)
 
@@ -82,30 +64,41 @@ def is_sector_related(article, sector_terms):
     desc = (article.get('description') or "").lower()
     return any(term in title or term in desc for term in sector_terms)
 
-def get_news(api_key):
+def get_news(api_key, per_sector=8, fallback_min=4):
     try:
         sector_results = {}
         for cat in categories:
-            query = cat.split()[0]  # broad main term: "auto", "solar", etc.
             resp = requests.get(
                 "https://newsapi.org/v2/everything",
                 params={
-                    "q": query,
+                    "q": cat,
                     "apiKey": api_key,
                     "sortBy": "publishedAt",
-                    "pageSize": 50
+                    "pageSize": 40,
+                    "domains": DOMAINS
                 },
                 timeout=10
             )
             resp.raise_for_status()
             sector_terms = SECTOR_TERMS[cat]
-            relevant = [
-                (art["title"], art["publishedAt"], art["url"])
-                for art in resp.json().get("articles", [])
-                if is_fresh(art) and is_sector_related(art, sector_terms)
+            fresh_articles = [
+                art for art in resp.json().get("articles", [])
+                if is_fresh(art)
             ]
-            if relevant:
-                sector_results[cat] = relevant
+            related = [
+                (art["title"], art["publishedAt"], art["url"])
+                for art in fresh_articles if is_sector_related(art, sector_terms)
+            ]
+            # If not enough, just add more fresh articles (for context, not perfect)
+            if len(related) < fallback_min:
+                for art in fresh_articles:
+                    tup = (art["title"], art["publishedAt"], art["url"])
+                    if tup not in related:
+                        related.append(tup)
+                    if len(related) >= fallback_min:
+                        break
+            if related:
+                sector_results[cat] = related[:per_sector]
         return sector_results
     except Exception as e:
         logging.error(f"News API request failed: {str(e)}")
@@ -116,33 +109,31 @@ def send_email(content, email_config):
         msg = MIMEMultipart()
         msg['From'] = email_config['sender_email']
         msg['To'] = email_config['receiver_email']
-        subject_date = datetime.now().strftime('%-m/%-d/%y')
+        # Format subject to "Daily News: m/d/yy"
+        subject_date = datetime.now().strftime('%-m/%-d/%y') if hasattr(datetime.now(), 'strftime') else datetime.now().strftime('%m/%d/%y')
         msg['Subject'] = f"Daily News: {subject_date}"
-
+        
         if not content or all(len(arts) == 0 for arts in content.values()):
             body = "<p><b>No sector news articles were found today.</b></p>"
         else:
             body = "<h2 style='color:#293241;font-family:sans-serif;'>📬 Your Daily News Digest</h2>"
-            for cat in categories:
-                if cat in content:
-                    articles = content[cat]
-                    section = DISPLAY_NAMES.get(cat, cat).upper()
-                    body += f"<h3 style='color:#1565c0;font-family:sans-serif;margin-bottom:0;'>{section}</h3><ul style='margin-top:5px;'>"
-                    for title, date, url in articles:
-                        body += (
-                            f"<li style='margin-bottom:10px;font-family:sans-serif;'>"
-                            f"<a href='{url}' style='font-weight:bold; color:#183153; text-decoration:none;'>{title}</a> "
-                            f"<span style='color:#888; font-size:90%;'>({date[:10]})</span>"
-                            f"</li>"
-                        )
-                    body += "</ul>"
+            for cat, articles in content.items():
+                body += f"<h3 style='color:#1565c0;font-family:sans-serif;margin-bottom:0;'>{cat.upper()}</h3><ul style='margin-top:5px;'>"
+                for title, date, url in articles:
+                    body += (
+                        f"<li style='margin-bottom:10px;font-family:sans-serif;'>"
+                        f"<a href='{url}' style='font-weight:bold; color:#183153; text-decoration:none;'>{title}</a> "
+                        f"<span style='color:#888; font-size:90%;'>({date[:10]})</span>"
+                        f"</li>"
+                    )
+                body += "</ul>"
         msg.attach(MIMEText(body, 'html'))
 
         with smtplib.SMTP_SSL(email_config['smtp_server'], email_config['smtp_port'], timeout=15) as server:
             server.login(email_config['sender_email'], email_config['smtp_password'])
             server.send_message(msg)
             logging.info("Email sent successfully")
-    except Exception as e:
+    except (smtplib.SMTPException, Exception) as e:
         logging.error(f"Failed to send email: {str(e)}")
         raise
 
@@ -155,7 +146,7 @@ def validate_config(config):
         raise ValueError("Missing environment variables")
     try:
         config['smtp_port'] = int(config['smtp_port'])
-    except Exception:
+    except ValueError:
         logging.error("Invalid SMTP_PORT value")
         raise
 
