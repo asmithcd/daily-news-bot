@@ -1,19 +1,14 @@
 import os
 import smtplib
 import requests
+import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timedelta
-import logging
+from datetime import datetime, timezone, timedelta
 
-# Configuring the logging
+# Logging setup
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
-
-####################################################################################################################
-# Change category variable below to fetch different news topics                                                    #
-# Possible categories with NewsAPI are: business, entertainment, general, health, science, sports, technology      #
-####################################################################################################################
 
 RELEVANT_KEYWORDS = [
     "earnings", "tariff", "tariffs", "trade war", "acquisition", "merger", "guidance",
@@ -23,21 +18,32 @@ RELEVANT_KEYWORDS = [
     "recall", "investigation", "class action"
 ]
 
-# Only fetch from reputable, business/finance-focused domains
 DOMAINS = "reuters.com,wsj.com,bloomberg.com,marketwatch.com,ft.com,cnbc.com,forbes.com,finance.yahoo.com,nytimes.com,bizjournals.com"
 
-# Slightly more targeted queries (but still broad)
 categories = [
     "auto dealers", "auto manufacturers", "auto parts",
     "solar", "pool industry", "mattress", "appliances",
     "powersports", "motorcycles", "rv"
 ]
 
-def is_relevant(article):
-    """Returns True if the article title or description matches relevant keywords."""
+def is_fresh(article, hours=36):
+    published = article.get("publishedAt")
+    if not published:
+        return False
+    try:
+        published_dt = datetime.strptime(published, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return False
+    return (datetime.now(timezone.utc) - published_dt) <= timedelta(hours=hours)
+
+def is_relevant(article, industry):
     title = article.get('title', '').lower()
     desc = article.get('description', '').lower()
-    return any(word in title or word in desc for word in RELEVANT_KEYWORDS)
+    industry_term = industry.split()[0].lower()
+    return (
+        (industry_term in title or industry_term in desc)
+        and any(word in title or word in desc for word in RELEVANT_KEYWORDS)
+    )
 
 def get_news(api_key):
     try:
@@ -49,14 +55,14 @@ def get_news(api_key):
                     "q": cat,
                     "apiKey": api_key,
                     "sortBy": "publishedAt",
-                    "pageSize": 10,  # fetch more per topic, filter later
+                    "pageSize": 10,
                     "domains": DOMAINS
                 },
                 timeout=10
             )
             resp.raise_for_status()
             for art in resp.json().get("articles", []):
-                if is_relevant(art):
+                if is_fresh(art) and is_relevant(art, cat):
                     all_articles.append((cat, art["title"], art["publishedAt"], art["url"]))
         if not all_articles:
             logging.warning("No market-moving articles found across all categories")
@@ -71,14 +77,17 @@ def send_email(content, email_config):
         msg['From'] = email_config['sender_email']
         msg['To'] = email_config['receiver_email']
         msg['Subject'] = f"📰 Daily Market-Moving News Digest - {datetime.utcnow().strftime('%Y-%m-%d')}"
-        
-        # Creating the email body
+
         if not content:
             body = "No market-moving articles were found today."
         else:
             body = "📬 Your Daily Market-Moving Industry News:\n\n"
-            for cat, title, date, url in content:
-                body += f"[{cat.upper()}] {title} ({date})\n{url}\n\n"
+            last_cat = None
+            for cat, title, date, url in sorted(content, key=lambda x: x[0]):
+                if cat != last_cat:
+                    body += f"\n==== {cat.upper()} ====\n"
+                    last_cat = cat
+                body += f"- {title} ({date[:10]})\n  {url}\n"
         msg.attach(MIMEText(body, 'plain'))
 
         with smtplib.SMTP_SSL(email_config['smtp_server'], email_config['smtp_port'], timeout=15) as server:
@@ -88,29 +97,22 @@ def send_email(content, email_config):
     except (smtplib.SMTPException, Exception) as e: 
         logging.error(f"Failed to send email: {str(e)}")
         raise
-      
-# Function to check all required environment vars 
+
 def validate_config(config):
     required_keys = ['sender_email', 'receiver_email', 'smtp_server',
-                     'smtp_port', 'smtp_password', 'newsapi_key'] # List of the required keys
-  
-    # Check for missing keys by verifying if they are empty or not
+                     'smtp_port', 'smtp_password', 'newsapi_key']
     missing = [key for key in required_keys if not config.get(key) or str(config.get(key)).strip() == ""]
-
     if missing:
-        logging.error(f"Missing configuration: {', '.join(missing)}") # Log missing keys
-        raise ValueError("Missing environment variables") # And so raise an error
-
+        logging.error(f"Missing configuration: {', '.join(missing)}")
+        raise ValueError("Missing environment variables")
     try:
-        config['smtp_port'] = int(config['smtp_port'])  # Making sure the SMTP_PORT is a valid integer
+        config['smtp_port'] = int(config['smtp_port'])
     except ValueError:
-        logging.error("Invalid SMTP_PORT value") # And so log an error if conversion fails
+        logging.error("Invalid SMTP_PORT value")
         raise
-      
-# Running the main script 
+
 if __name__ == "__main__":
     try:
-      # Loading the environment variables into a dictionary
         config = {
             'sender_email': os.getenv('SENDER_EMAIL'),
             'receiver_email': os.getenv('RECEIVER_EMAIL'),
@@ -120,22 +122,16 @@ if __name__ == "__main__":
             'newsapi_key': os.getenv('NEWSAPI_KEY')
         }
 
-        # Debugging: Log environment variables 
-        logging.info(f"Environment Variables: {os.environ}")  
-        logging.info(f"Loaded config: {config}")  
+        logging.info(f"Loaded config: {config}")
         validate_config(config)
-      
-        validate_config(config) # Validate environment variables
-        logging.info("Configuration validated successfully") # Log success message
-      
-        # Fetch news articles
-        news_content = get_news(config['newsapi_key']) 
-        
-        if news_content: # If news content is available, send the email
+        logging.info("Configuration validated successfully")
+
+        news_content = get_news(config['newsapi_key'])
+
+        if news_content:
             send_email(news_content, config)
         else:
-            logging.warning("No news content to send") # And log a warning if no news found
-            
-    except Exception as e: # Catch any major failures
+            logging.warning("No news content to send")
+    except Exception as e:
         logging.error(f"Major failure: {str(e)}")
-        raise # And raise the exception for debugging
+        raise
