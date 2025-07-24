@@ -78,10 +78,9 @@ def is_fresh(article, hours=36):
 
 def is_sector_related(article, sector_terms):
     title = (article.get('title') or "").lower()
-    # Only use the headline for matching.
     return any(term in title for term in sector_terms)
 
-def get_news(api_key, per_sector=8, fallback_min=3):
+def get_news(api_key):
     try:
         sector_results = {}
         for cat in categories:
@@ -91,7 +90,7 @@ def get_news(api_key, per_sector=8, fallback_min=3):
                     "q": cat,
                     "apiKey": api_key,
                     "sortBy": "publishedAt",
-                    "pageSize": 40,
+                    "pageSize": 50,
                     "domains": DOMAINS
                 },
                 timeout=10
@@ -106,15 +105,8 @@ def get_news(api_key, per_sector=8, fallback_min=3):
                 (art["title"], art["publishedAt"], art["url"])
                 for art in fresh_articles if is_sector_related(art, sector_terms)
             ]
-            if len(relevant) < fallback_min:
-                for art in fresh_articles:
-                    tup = (art["title"], art["publishedAt"], art["url"])
-                    if tup not in relevant:
-                        relevant.append(tup)
-                    if len(relevant) >= fallback_min:
-                        break
             if relevant:
-                sector_results[cat] = relevant[:per_sector]
+                sector_results[cat] = relevant
         return sector_results
     except Exception as e:
         logging.error(f"News API request failed: {str(e)}")
