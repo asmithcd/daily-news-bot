@@ -6,7 +6,6 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone, timedelta
 
-# Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 RELEVANT_KEYWORDS = [
@@ -69,7 +68,7 @@ def is_fresh(article, hours=36):
         return False
     return (datetime.now(timezone.utc) - published_dt) <= timedelta(hours=hours)
 
-def is_final_match(article, sector_terms):
+def is_market_moving(article, sector_terms):
     title = (article.get('title') or "").lower()
     desc = (article.get('description') or "").lower()
     return (
@@ -77,7 +76,12 @@ def is_final_match(article, sector_terms):
         any(term in title or term in desc for term in sector_terms)
     )
 
-def get_news(api_key):
+def is_sector_related(article, sector_terms):
+    title = (article.get('title') or "").lower()
+    desc = (article.get('description') or "").lower()
+    return any(term in title or term in desc for term in sector_terms)
+
+def get_news(api_key, max_per_sector=6, fallback_min=3):
     try:
         sector_results = {}
         for cat in categories:
@@ -87,20 +91,32 @@ def get_news(api_key):
                     "q": cat,
                     "apiKey": api_key,
                     "sortBy": "publishedAt",
-                    "pageSize": 30,
+                    "pageSize": 40,
                     "domains": DOMAINS
                 },
                 timeout=10
             )
             resp.raise_for_status()
             sector_terms = SECTOR_TERMS[cat]
-            articles = []
-            for art in resp.json().get("articles", []):
-                if is_fresh(art) and is_final_match(art, sector_terms):
-                    articles.append((art["title"], art["publishedAt"], art["url"]))
-            if articles:
-                sector_results[cat] = articles
-        return sector_results  # will be empty dict if nothing found
+            fresh_articles = [
+                art for art in resp.json().get("articles", [])
+                if is_fresh(art)
+            ]
+            # Market-moving (priority)
+            moving = [
+                (art["title"], art["publishedAt"], art["url"])
+                for art in fresh_articles if is_market_moving(art, sector_terms)
+            ]
+            # If not enough, backfill with sector-related news
+            if len(moving) < fallback_min:
+                additional = [
+                    (art["title"], art["publishedAt"], art["url"])
+                    for art in fresh_articles if is_sector_related(art, sector_terms) and (art["title"], art["publishedAt"], art["url"]) not in moving
+                ]
+                moving += additional[:fallback_min - len(moving)]
+            if moving:
+                sector_results[cat] = moving[:max_per_sector]
+        return sector_results
     except Exception as e:
         logging.error(f"News API request failed: {str(e)}")
         return {}
@@ -110,17 +126,19 @@ def send_email(content, email_config):
         msg = MIMEMultipart()
         msg['From'] = email_config['sender_email']
         msg['To'] = email_config['receiver_email']
-        msg['Subject'] = f"📰 Daily Market-Moving News Digest - {datetime.utcnow().strftime('%Y-%m-%d')}"
+        # Format the subject to "Daily News: mm/dd/yy"
+        subject_date = datetime.now().strftime('%-m/%-d/%y') if hasattr(datetime.now(), 'strftime') else datetime.now().strftime('%m/%d/%y')
+        msg['Subject'] = f"Daily News: {subject_date}"
         
         if not content or all(len(arts) == 0 for arts in content.values()):
-            body = "<p><b>No market-moving articles were found today.</b></p>"
+            body = "<p><b>No sector news articles were found today.</b></p>"
         else:
-            body = "<h2 style='color:#293241;'>📬 Your Daily Market-Moving Industry News</h2>"
+            body = "<h2 style='color:#293241;font-family:sans-serif;'>📬 Your Daily News Digest</h2>"
             for cat, articles in content.items():
-                body += f"<h3 style='color:#1565c0;margin-bottom:0;'>{cat.upper()}</h3><ul style='margin-top:5px;'>"
+                body += f"<h3 style='color:#1565c0;font-family:sans-serif;margin-bottom:0;'>{cat.upper()}</h3><ul style='margin-top:5px;'>"
                 for title, date, url in articles:
                     body += (
-                        f"<li style='margin-bottom:10px;'>"
+                        f"<li style='margin-bottom:10px;font-family:sans-serif;'>"
                         f"<a href='{url}' style='font-weight:bold; color:#183153; text-decoration:none;'>{title}</a> "
                         f"<span style='color:#888; font-size:90%;'>({date[:10]})</span>"
                         f"</li>"
@@ -164,7 +182,7 @@ if __name__ == "__main__":
         logging.info("Configuration validated successfully")
 
         news_content = get_news(config['newsapi_key'])
-        # Always send email—even if nothing is found (for visibility)
+        # Always send email—even if nothing is found
         send_email(news_content or {}, config)
     except Exception as e:
         logging.error(f"Major failure: {str(e)}")
