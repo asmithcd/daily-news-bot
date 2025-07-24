@@ -41,7 +41,7 @@ SECTOR_TERMS = {
         "solar", "photovoltaic", "pv", "first solar", "enphase", "solar edge", "maxeon", "sunpower", "sunrun", "solarcity"
     ],
     "pool industry": [
-        "poolcorp", "hayward", "pentair", "leslie's", "fluidra", "zodiac pool", "commercial pool", "swimming pool equipment", "pool equipment", "pool manufacturer"
+        "poolcorp", "hayward", "pentair", "leslie's", "fluidra", "zodiac pool", "commercial pool", "swimming pool equipment", "pool equipment", "pool manufacturer", "pool supply"
     ],
     "mattresses": [
         "mattress", "mattress company", "mattress manufacturer", "tempur", "sleep number", "sealy", "casper", "simmons", "purple innovation", "tuft & needle"
@@ -60,6 +60,13 @@ SECTOR_TERMS = {
     ]
 }
 
+# Words that should never allow a match (pop culture, hotels, travel, TV, etc)
+MUST_NOT = [
+    "hotel", "resort", "spa", "netflix", "movie", "series", "show", "binge", "streaming",
+    "music", "concert", "festival", "tourism", "restaurant", "cuisine", "celebrity", "tv", "film",
+    "fashion", "style", "makeup", "beauty", "beach", "museum", "travel", "luxury stay", "vacation"
+]
+
 categories = sorted(DISPLAY_NAMES.keys(), key=lambda x: DISPLAY_NAMES[x])
 
 def is_fresh(article, hours=36):
@@ -75,7 +82,10 @@ def is_fresh(article, hours=36):
 def is_sector_related(article, sector_terms):
     title = (article.get('title') or "").lower()
     desc = (article.get('description') or "").lower()
-    return any(term in title or term in desc for term in sector_terms)
+    combined = f"{title} {desc}"
+    if any(bad in combined for bad in MUST_NOT):
+        return False
+    return any(term in combined for term in sector_terms)
 
 def get_news(api_key):
     try:
