@@ -14,9 +14,14 @@ logging.basicConfig(level=logging.INFO,
 # Change category variable below to fetch different news topics                                                    #
 # Possible categories with NewsAPI are: business, entertainment, general, health, science, sports, technology      #
 ####################################################################################################################
-category = "technology"
+categories = [
+    "auto dealers", "auto manufacturers", "auto parts",
+    "solar energy", "pool industry", "mattresses",
+    "appliances", "powersports", "motorcycles", "RVs"
+]
 
-# Fetching top tech news from NewsAPI 
+
+# Fetching top news across multiple industries from NewsAPI 
 def get_news(api_key):
     try:
         date = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d') # Get yesterday's date to fetch relevant news
@@ -26,16 +31,22 @@ def get_news(api_key):
         response = requests.get(url, timeout=10)
         response.raise_for_status()  # Raise exception for 4xx/5xx errors (HTTP errors)
       
-        # Extracting top 5 news articles from the API response
-        articles = response.json().get('articles', [])[:5]  # Change this to get more/less articles 
+      all_articles = []
+for cat in categories:
+    resp = requests.get(
+        "https://newsapi.org/v2/everything",
+        params={
+            "q": cat,
+            "apiKey": os.getenv("NEWSAPI_KEY"),
+            "sortBy": "publishedAt",
+            "pageSize": 3
+        },
+        timeout=10
+    )
+    resp.raise_for_status()
+    for art in resp.json().get("articles", []):
+        all_articles.append((cat, art["title"], art["publishedAt"], art["url"]))
 
-        # And if no articles are found, log a warning and return none
-        if not articles:
-            logging.warning("No articles found in API response")
-            return None
-            
-        news_snippets = [] # Simple list to store formatted news snippets
-        for idx, article in enumerate(articles, 1):
             title = article.get('title', 'No title available').strip() # Get news title or fallback to default
             description = article.get('description', '').strip() # Get news description
             url = article.get('url', '#').strip() # And the article URL
@@ -64,15 +75,10 @@ def send_email(content, email_config):
         msg['Subject'] = f"📰 Daily Tech Digest - {datetime.utcnow().strftime('%Y-%m-%d')}" # Email subject with date
         
         # Creating the email body
-        body = (
-            "🚀 Your Daily Tech News Update\n\n"
-            "Here are today's top stories:\n\n"
-            f"{content}\n"
-            "Stay informed! 💡\n"
-            "— Your Own News Bot"
-        )
-        # Attaching email body as plain text (Can be HTML if needed, see FAQs)
-        msg.attach(MIMEText(body, 'plain')) 
+        body = "📬 Your Daily Market News Digest:\n\n"
+for cat, title, date, url in all_articles:
+    body += f"[{cat.upper()}] {title} ({date})\n{url}\n\n"
+msg.attach(MIMEText(body, 'plain'))
       
         # Connecting to SMTP server using SSL
         with smtplib.SMTP_SSL(email_config['smtp_server'], email_config['smtp_port'], timeout=15) as server:
