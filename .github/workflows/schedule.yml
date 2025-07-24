@@ -1,9 +1,9 @@
 name: Daily Tech News Email
 
 on:
- schedule:
-    - cron: '0 13 * * *'  # Runs at 7 AM Mountain (13:00 UTC) daily
-  workflow_dispatch:      # Allows manual runs as well
+  schedule:
+    - cron: '0 13 * * *'     # Runs at 7 AM Mountain Time (13:00 UTC), daily
+  workflow_dispatch:        # Allows manual runs too
 
 jobs:
   send-email:
