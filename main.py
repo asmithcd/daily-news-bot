@@ -29,38 +29,34 @@ DISPLAY_NAMES = {
 
 SECTOR_TERMS = {
     "auto dealers": [
-        "autonation", "group 1 automotive", "lithia", "sonic automotive", "penske automotive",
-        "asbury automotive", "carmax", "cargurus"
+        "auto dealer", "dealership", "car dealership", "car sales", "autonation", "group 1 automotive", "lithia", "sonic automotive", "penske automotive", "asbury automotive", "carmax", "cargurus"
     ],
     "auto manufacturers": [
-        "ford", "general motors", "gm", "tesla", "toyota", "stellantis", "hyundai", "honda",
-        "volkswagen", "mercedes", "bmw", "nissan"
+        "automaker", "car maker", "vehicle manufacturer", "ford", "general motors", "gm", "tesla", "toyota", "stellantis", "hyundai", "honda", "volkswagen", "mercedes", "bmw", "nissan"
     ],
     "auto parts": [
-        "oreilly", "o'reilly", "advance auto", "advance auto parts", "autozone", "genuine parts",
-        "gpc", "dorman", "borgwarner", "delphi", "magna", "lkq", "standard motor products"
+        "auto parts", "parts retailer", "oreilly", "o'reilly", "advance auto", "advance auto parts", "autozone", "genuine parts", "gpc", "dorman", "borgwarner", "delphi", "magna", "lkq", "standard motor products"
     ],
     "solar": [
-        "first solar", "enphase", "solar edge", "maxeon", "sunpower", "sunrun", "solarcity"
+        "solar", "photovoltaic", "pv", "first solar", "enphase", "solar edge", "maxeon", "sunpower", "sunrun", "solarcity"
     ],
     "pool industry": [
-        "poolcorp", "hayward", "pentair", "leslie's", "fluidra", "zodiac pool"
+        "poolcorp", "hayward", "pentair", "leslie's", "fluidra", "zodiac pool", "commercial pool", "swimming pool equipment", "pool equipment", "pool manufacturer"
     ],
     "mattresses": [
-        "tempur", "sleep number", "sealy", "casper", "simmons", "purple innovation", "tuft & needle"
+        "mattress", "mattress company", "mattress manufacturer", "tempur", "sleep number", "sealy", "casper", "simmons", "purple innovation", "tuft & needle"
     ],
     "appliances": [
-        "whirlpool", "electrolux", "frigidaire", "maytag", "lg electronics", "haier", "bosch",
-        "samsung appliances", "ge appliances"
+        "appliance", "appliance manufacturer", "appliance company", "whirlpool", "electrolux", "frigidaire", "maytag", "lg electronics", "haier", "bosch", "samsung appliances", "ge appliances"
     ],
     "powersports": [
-        "polaris", "brp", "can-am", "yamaha", "arctic cat", "sea-doo", "ski-doo"
+        "powersport", "atv", "utv", "polaris", "brp", "can-am", "yamaha", "arctic cat", "sea-doo", "ski-doo"
     ],
     "motorcycles": [
-        "harley-davidson", "ducati", "ktm", "yamaha", "honda", "indian motorcycle"
+        "motorcycle", "motorcycles", "harley-davidson", "ducati", "ktm", "yamaha", "honda", "indian motorcycle"
     ],
     "rvs": [
-        "winnebago", "thor", "forest river", "jayco", "rev group", "newmar", "airstream"
+        "rv", "rvs", "motorhome", "travel trailer", "winnebago", "thor", "forest river", "jayco", "rev group", "newmar", "airstream"
     ]
 }
 
@@ -78,7 +74,8 @@ def is_fresh(article, hours=36):
 
 def is_sector_related(article, sector_terms):
     title = (article.get('title') or "").lower()
-    return any(term in title for term in sector_terms)
+    desc = (article.get('description') or "").lower()
+    return any(term in title or term in desc for term in sector_terms)
 
 def get_news(api_key):
     try:
