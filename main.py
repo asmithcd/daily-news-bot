@@ -13,12 +13,17 @@ logging.basicConfig(level=logging.INFO,
 RELEVANT_KEYWORDS = [
     "earnings", "tariff", "tariffs", "trade war", "acquisition", "merger", "guidance",
     "forecast", "ipo", "strike", "regulation", "bill", "legislation", "lawsuit",
-    "settlement", "antitrust", "sec", "layoff", "guidance", "restructuring", "chapter 11",
+    "settlement", "antitrust", "sec", "layoff", "restructuring", "chapter 11",
     "guidelines", "inflation", "deflation", "revenue", "profit", "quarter", "sales",
-    "recall", "investigation", "class action"
+    "recall", "investigation", "class action", "price increase", "price hike", "costs",
+    "supply chain", "union", "agreement", "deal", "fine", "settlement"
 ]
 
-DOMAINS = "reuters.com,wsj.com,bloomberg.com,marketwatch.com,ft.com,cnbc.com,forbes.com,finance.yahoo.com,nytimes.com,bizjournals.com"
+DOMAINS = (
+    "reuters.com,wsj.com,bloomberg.com,marketwatch.com,ft.com,cnbc.com,forbes.com,"
+    "finance.yahoo.com,nytimes.com,bizjournals.com,autonews.com,greentechmedia.com,"
+    "pv-magazine.com,rvbusiness.com,cycleworld.com,motorcycle.com,appliancebusiness.com"
+)
 
 categories = [
     "auto dealers", "auto manufacturers", "auto parts",
@@ -36,14 +41,10 @@ def is_fresh(article, hours=36):
         return False
     return (datetime.now(timezone.utc) - published_dt) <= timedelta(hours=hours)
 
-def is_relevant(article, industry):
+def is_relevant(article):
     title = article.get('title', '').lower()
     desc = article.get('description', '').lower()
-    industry_term = industry.split()[0].lower()
-    return (
-        (industry_term in title or industry_term in desc)
-        and any(word in title or word in desc for word in RELEVANT_KEYWORDS)
-    )
+    return any(word in title or word in desc for word in RELEVANT_KEYWORDS)
 
 def get_news(api_key):
     try:
@@ -55,14 +56,14 @@ def get_news(api_key):
                     "q": cat,
                     "apiKey": api_key,
                     "sortBy": "publishedAt",
-                    "pageSize": 10,
+                    "pageSize": 30,  # larger pool, filter later
                     "domains": DOMAINS
                 },
                 timeout=10
             )
             resp.raise_for_status()
             for art in resp.json().get("articles", []):
-                if is_fresh(art) and is_relevant(art, cat):
+                if is_fresh(art) and is_relevant(art):
                     all_articles.append((cat, art["title"], art["publishedAt"], art["url"]))
         if not all_articles:
             logging.warning("No market-moving articles found across all categories")
