@@ -14,17 +14,33 @@ logging.basicConfig(level=logging.INFO,
 # Change category variable below to fetch different news topics                                                    #
 # Possible categories with NewsAPI are: business, entertainment, general, health, science, sports, technology      #
 ####################################################################################################################
-categories = [
-    "auto dealers", "auto manufacturers", "auto parts",
-    "solar energy", "pool industry", "mattresses",
-    "appliances", "powersports", "motorcycles", "RVs"
+
+RELEVANT_KEYWORDS = [
+    "earnings", "tariff", "tariffs", "trade war", "acquisition", "merger", "guidance",
+    "forecast", "ipo", "strike", "regulation", "bill", "legislation", "lawsuit",
+    "settlement", "antitrust", "sec", "layoff", "guidance", "restructuring", "chapter 11",
+    "guidelines", "inflation", "deflation", "revenue", "profit", "quarter", "sales",
+    "recall", "investigation", "class action"
 ]
 
+# Only fetch from reputable, business/finance-focused domains
+DOMAINS = "reuters.com,wsj.com,bloomberg.com,marketwatch.com,ft.com,cnbc.com,forbes.com,finance.yahoo.com,nytimes.com,bizjournals.com"
 
-# Fetching top news across multiple industries from NewsAPI 
+# Slightly more targeted queries (but still broad)
+categories = [
+    "auto dealers", "auto manufacturers", "auto parts",
+    "solar", "pool industry", "mattress", "appliances",
+    "powersports", "motorcycles", "rv"
+]
+
+def is_relevant(article):
+    """Returns True if the article title or description matches relevant keywords."""
+    title = article.get('title', '').lower()
+    desc = article.get('description', '').lower()
+    return any(word in title or word in desc for word in RELEVANT_KEYWORDS)
+
 def get_news(api_key):
     try:
-        # any code above
         all_articles = []
         for cat in categories:
             resp = requests.get(
@@ -33,47 +49,45 @@ def get_news(api_key):
                     "q": cat,
                     "apiKey": api_key,
                     "sortBy": "publishedAt",
-                    "pageSize": 3
+                    "pageSize": 10,  # fetch more per topic, filter later
+                    "domains": DOMAINS
                 },
                 timeout=10
             )
             resp.raise_for_status()
             for art in resp.json().get("articles", []):
-                all_articles.append((cat, art["title"], art["publishedAt"], art["url"]))
-
+                if is_relevant(art):
+                    all_articles.append((cat, art["title"], art["publishedAt"], art["url"]))
         if not all_articles:
-            logging.warning("No articles found across all categories")
-
+            logging.warning("No market-moving articles found across all categories")
         return all_articles
-
     except Exception as e:
         logging.error(f"News API request failed: {str(e)}")
         return None
-      
-# Function to send email with fetched news
+
 def send_email(content, email_config):
     try:
-        msg = MIMEMultipart() # Creating an email message using MIMEMultipart
-        msg['From'] = email_config['sender_email'] # Set sender's email
-        msg['To'] = email_config['receiver_email'] # Set recipient's email
-        msg['Subject'] = f"📰 Daily Tech Digest - {datetime.utcnow().strftime('%Y-%m-%d')}" # Email subject with date
+        msg = MIMEMultipart()
+        msg['From'] = email_config['sender_email']
+        msg['To'] = email_config['receiver_email']
+        msg['Subject'] = f"📰 Daily Market-Moving News Digest - {datetime.utcnow().strftime('%Y-%m-%d')}"
         
         # Creating the email body
-        body = "📬 Your Daily Market News Digest:\n\n"
-        for cat, title, date, url in content:
-            body += f"[{cat.upper()}] {title} ({date})\n{url}\n\n"
+        if not content:
+            body = "No market-moving articles were found today."
+        else:
+            body = "📬 Your Daily Market-Moving Industry News:\n\n"
+            for cat, title, date, url in content:
+                body += f"[{cat.upper()}] {title} ({date})\n{url}\n\n"
         msg.attach(MIMEText(body, 'plain'))
-      
-        # Connecting to SMTP server using SSL
+
         with smtplib.SMTP_SSL(email_config['smtp_server'], email_config['smtp_port'], timeout=15) as server:
-            server.login(email_config['sender_email'], email_config['smtp_password']) 
-            server.send_message(msg) # Send email
-            logging.info("Email sent successfully") # Log success message
-          
-    # Handle email sending errors        
+            server.login(email_config['sender_email'], email_config['smtp_password'])
+            server.send_message(msg)
+            logging.info("Email sent successfully")
     except (smtplib.SMTPException, Exception) as e: 
         logging.error(f"Failed to send email: {str(e)}")
-        raise # Raise the exception for debugging
+        raise
       
 # Function to check all required environment vars 
 def validate_config(config):
