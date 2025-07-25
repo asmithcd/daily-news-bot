@@ -82,6 +82,7 @@ def fetch_articles(q: str, domains: str = None) -> List[Dict]:
         resp = requests.get(url, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
+        print(f"Fetched {len(data.get('articles', []))} articles for query '{q}' with domains '{domains}'")
         return data.get("articles", [])
     except Exception as e:
         print(f"Error fetching articles for query '{q}': {e}", file=sys.stderr)
@@ -95,11 +96,14 @@ def summarize(text: str, max_sentences: int = 3) -> str:
 
 def build_digest() -> str:
     lines: List[str] = []
+    any_articles = False
     for industry in sorted(QUERIES.keys()):
         params = QUERIES[industry]
         articles = fetch_articles(params["q"], params.get("domains"))
         if not articles:
+            print(f"[INFO] No articles found for {industry}.")
             continue
+        any_articles = True
         heading_html = f"<p><strong><u>{industry}</u></strong></p>"
         lines.append(heading_html)
         for art in articles:
@@ -110,7 +114,9 @@ def build_digest() -> str:
             article_html = f'<p><a href="{url}" target="_blank">{title}</a>: {summary}</p>'
             lines.append(article_html)
         lines.append("<br/>")
-    return "\n".join(lines)
+    digest = "\n".join(lines)
+    print("Digest generated. Length (chars):", len(digest))
+    return digest
 
 def send_email(html_body: str) -> None:
     if not (GMAIL_USER and GMAIL_APP_PASSWORD):
@@ -127,6 +133,7 @@ def send_email(html_body: str) -> None:
     )
     msg.add_alternative(html_body, subtype="html")
     try:
+        print("Connecting to Gmail SMTP server...")
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
             server.set_debuglevel(1)  # Print SMTP conversation
             server.starttls()
@@ -139,9 +146,11 @@ def send_email(html_body: str) -> None:
 
 def main() -> None:
     html_digest = build_digest()
+    print("DIGEST CONTENT:\n", html_digest)
     if not html_digest.strip():
         print("No relevant articles found in the last 24 hours for any industry.")
         return
+    print("Attempting to send email...")
     send_email(html_digest)
 
 if __name__ == "__main__":
