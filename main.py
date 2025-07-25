@@ -1,37 +1,5 @@
-main.py - Automated industry news digest
-
-This script uses the NewsAPI (https://newsapi.org) to collect the latest
-news articles for a set of U.S.-focused industries, summarizes them and
-sends a formatted email digest. It mirrors the manual curation logic used
-in our test runs: industry names are listed alphabetically, industry
-headings are underlined and all caps, and each article title is
-hyperlinked and followed by a few sentences of summary.
-
-To run this script successfully you need to:
-
-1. Sign up at https://newsapi.org and obtain an API key.
-2. Create a Gmail account (or use an existing one) with "less secure app
-   access" enabled or, preferably, an app password (see
-   https://support.google.com/accounts/answer/185833). Store your Gmail
-   username and app password in the environment variables GMAIL_USER and
-   GMAIL_APP_PASSWORD.
-3. Set the environment variable NEWSAPI_KEY to your NewsAPI key.
-4. (Optional) Modify the `QUERIES` dictionary below to adjust search terms
-   and domains for each industry. Fine-tuning these parameters helps
-   ensure the returned articles are relevant and drawn from reputable
-   outlets.
-
-Once configured, you can schedule this script to run on weekdays using
-cron (Linux/macOS) or Task Scheduler (Windows). For example, the
-following cron entry runs the script at 07:15 AM Mountain Time every
-weekday:
-
-    15 7 * * 1-5 /usr/bin/python3 /path/to/main.py
-
-NOTE: NewsAPI free tiers have request limits and may not include every
-publication. You can specify particular domains to focus on trusted
-sources. See https://newsapi.org/docs/endpoints/everything for full
-parameter documentation.
+"""
+Automated industry news digest using NewsAPI and Gmail.
 """
 
 import datetime
@@ -40,12 +8,9 @@ import smtplib
 import sys
 from email.message import EmailMessage
 from typing import Dict, List
-
 import requests
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
+# ---- Configuration ----
 
 NEWSAPI_KEY = os.environ.get("NEWSAPI_KEY")
 GMAIL_USER = os.environ.get("GMAIL_USER")
