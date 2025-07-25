@@ -126,11 +126,16 @@ def send_email(html_body: str) -> None:
         "This email contains an HTML version of the digest. Please view it in an HTML-capable client.",
     )
     msg.add_alternative(html_body, subtype="html")
-    with smtplib.SMTP("smtp.gmail.com", 587) as server:
-        server.starttls()
-        server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
-        server.send_message(msg)
-    print(f"Digest email sent to {RECIPIENT}")
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.set_debuglevel(1)  # Print SMTP conversation
+            server.starttls()
+            server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+            server.send_message(msg)
+        print(f"Digest email sent to {RECIPIENT}")
+    except Exception as e:
+        print("EMAIL SENDING ERROR:", e)
+        raise
 
 def main() -> None:
     html_digest = build_digest()
